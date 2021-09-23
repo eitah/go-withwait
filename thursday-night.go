@@ -78,13 +78,19 @@ func mainErr() error {
 						if err := t.apply(); err != nil {
 							t.Error = err
 							applyHasFailed = true
-							close(done)
+							// this select is dumb but it means that the routine will
+							// check if any others have failed first before trying to
+							// close done twice and causing a panic.
+							select {
+							case <-done:
+							default:
+								close(done)
+							}
 						}
 					}
 					results <- t
 				case <-done:
 					applyHasFailed = true
-					// fmt.Println("done was called")
 				}
 			}
 		}()
