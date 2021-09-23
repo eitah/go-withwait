@@ -41,8 +41,10 @@ func init() {
 func mainErr() error {
 	var wg sync.WaitGroup
 
-	jobs := make(chan *Target, len(targets))
-	results := make(chan *Target, len(targets))
+	jobs := make(chan *Target)
+	// jobs := make(chan *Target, len(targets))
+	results := make(chan *Target)
+	// results := make(chan *Target, len(targets))
 	done := make(chan struct{})
 	wg.Add(len(targets))
 
@@ -79,7 +81,7 @@ func mainErr() error {
 					} else {
 						// i was getting a nil panic till I added this not sure why jobs hits
 						if t == nil {
-							fmt.Fprintf(os.Stderr, "skipped target nil: %s", t)
+							fmt.Fprintln(os.Stderr, "catch a nil target")
 							return
 						}
 						fmt.Fprintf(os.Stderr, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> skipped : %s\n", t.Name)
@@ -125,6 +127,7 @@ func mainErr() error {
 	}()
 
 	// has to do with supplying jobs
+	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(targets), func(i, j int) { targets[i], targets[j] = targets[j], targets[i] })
 	for _, target := range targets {
 		jobs <- target
@@ -163,8 +166,12 @@ func (t *Target) apply() error {
 	time.Sleep(time.Second)
 	// fmt.Printf("applying %s\n", t.Name)
 
-	if t.Name == "f" || t.Name == "c" {
-		// if t.Name == "f" {
+	// if t.Name == "f" || t.Name == "c" {
+	if t == nil {
+		fmt.Fprintln(os.Stderr, "catch a apply target is nil")
+		return nil
+	}
+	if t.Name == "f" {
 		return fmt.Errorf("ZOMG BAD")
 	}
 	return nil
