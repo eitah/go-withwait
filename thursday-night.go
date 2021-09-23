@@ -1,10 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"github.com/fatih/color"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -55,44 +56,65 @@ func init() {
 }
 
 func mainErr() error {
-	// mainerr closes done when it returns in this case we're pretending
-	// we want to kill everything immediately when done is called
+	var wg sync.WaitGroup
+
+	jobs := make(chan Target)
+	results := make(chan Target)
 	done := make(chan struct{})
-	// defer close(done)
 
-	_, _ = genJobs(done, targets)
+	wg.Add(len(targets))
 
-	countConcurrent := 8
 	// c := make(chan Target, len(targets))
-	for i := 0; i < countConcurrent; i++ {
-		fmt.Println("terraform apply")
-		fmt.Println("print result")
+	for i := 0; i < 8; i++ {
+		go func() {
+			applyHasFailed := false
+			for {
+				select {
+				case t := <-jobs:
+					if applyHasFailed {
+						t.Skipped = true
+						fmt.Printf("skipped later target: %s\n", t.Name)
+					} else {
+						if err := t.apply(); err != nil {
+							t.Error = err
+							applyHasFailed = true
+							close(done)
+						}
+					}
+					results <- t
+				case <-done:
+					applyHasFailed = true
+					// fmt.Println("done was called")
+				}
+			}
+		}()
 	}
 
-	return doMeAfter(0, 0, 0)
-}
-
-// genJobs turns an array of targets into a channel of targets
-// for prod I could replace with a for loop like it was but meh.
-// this is a learning thing
-func genJobs(done <-chan struct{}, targets []Target) (<-chan Target, <-chan error) {
-	jobs := make(chan Target)
-	errc := make(chan error, 1)
-
+	var errorCount int
+	var successCount int
+	var skippedCount int
 	go func() {
-		// guarantee jobs is always closed
-		defer close(jobs)
-
-		for _, target := range targets {
-			select {
-			case jobs <- target:
-			case <-done:
-				errc <- errors.New("terraform canceled")
+		for t := range results {
+			if t.Error != nil {
+				errorCount++
+				color.New(color.FgRed).Fprintf(os.Stderr, "%s ❌ ERROR\n", t.Name)
+			} else if t.Skipped {
+				fmt.Fprintf(os.Stderr, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> skipped : %s\n", t.Name)
+				skippedCount++
+			} else {
+				color.New(color.FgGreen).Fprintf(os.Stderr, "%s ✅ SUCCESS\n", t.Name)
+				color.Unset() // Don't forget to unset
+				successCount++
 			}
+			wg.Done()
 		}
 	}()
 
-	return jobs, errc
+	for _, target := range targets {
+		jobs <- target
+	}
+	wg.Wait()
+	return doMeAfter(0, 0, 0)
 }
 
 func (t *Target) apply() error {
@@ -105,8 +127,8 @@ func (t *Target) apply() error {
 
 	fmt.Printf("applying %s\n", t.Name)
 
-	// if t.Name == "f" || t.Name == "c" {
-	if t.Name == "f" {
+	if t.Name == "f" || t.Name == "c" {
+		// if t.Name == "f" {
 		return fmt.Errorf("ZOMG BAD")
 	}
 	return nil
