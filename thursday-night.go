@@ -9,9 +9,12 @@ import (
 	"time"
 )
 
+var red *color.Color
+var green *color.Color
+
 func main() {
 	if err := mainErr(); err != nil {
-		fmt.Printf("\nError: %s\n", err)
+		red.Printf("Error: %s.\n", err)
 	}
 }
 
@@ -24,20 +27,28 @@ type Target struct {
 var names []string
 var targets []Target
 
-func doMeAfter(errorCount, lentargets, skippedCount int) error {
+func doMeAfter(successCount, errorCount, lentargets, skippedCount int, errors []string) error {
 
 	if errorCount > 0 {
-		fmt.Println("")
-		return fmt.Errorf("%d/%d targets with errors. %d targets skipped. See above", errorCount, lentargets, skippedCount)
-
+		fmt.Fprintln(os.Stderr)
+		red.Fprintf(os.Stderr, "Failed targets (⌘ + F):\n")
+		for _, name := range errors {
+			fmt.Fprintf(os.Stderr, "• %s \n", name)
+		}
+		if skippedCount > 0 {
+			fmt.Fprintf(os.Stderr, "%d targets skipped due to apply failure.\n", skippedCount)
+		}
+		return fmt.Errorf("%d/%d targets with errors. See above", errorCount, lentargets)
 	}
 
-	fmt.Fprintln(os.Stderr, "🌈 Applying Terraform succeeded 🌈")
+	green.Fprintln(os.Stderr, "🌈 Applying Terraform succeeded 🌈")
 
 	return nil
 }
 
 func init() {
+	red = color.New(color.FgRed)
+	green = color.New(color.FgGreen)
 	names = []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"}
 
 	for _, name := range names {
@@ -73,7 +84,7 @@ func mainErr() error {
 				case t := <-jobs:
 					if applyHasFailed {
 						t.Skipped = true
-						fmt.Printf("skipped later target: %s\n", t.Name)
+						// fmt.Printf("skipped later target: %s\n", t.Name)
 					} else {
 						if err := t.apply(); err != nil {
 							t.Error = err
@@ -96,6 +107,7 @@ func mainErr() error {
 		}()
 	}
 
+	errors := []string{}
 	var errorCount int
 	var successCount int
 	var skippedCount int
@@ -103,13 +115,17 @@ func mainErr() error {
 		for t := range results {
 			if t.Error != nil {
 				errorCount++
-				color.New(color.FgRed).Fprintf(os.Stderr, "%s ❌ ERROR\n", t.Name)
+				errors = append(errors, t.Name)
+				red.Fprintf(os.Stderr, "%s ❌ ERROR\n", t.Name)
+				color.Unset() // Don't forget to unset
+				fmt.Println(t.Error)
 			} else if t.Skipped {
-				fmt.Fprintf(os.Stderr, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> skipped : %s\n", t.Name)
+				// fmt.Fprintf(os.Stderr, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> skipped : %s\n", t.Name)
 				skippedCount++
 			} else {
-				color.New(color.FgGreen).Fprintf(os.Stderr, "%s ✅ SUCCESS\n", t.Name)
+				green.Fprintf(os.Stderr, "%s ✅ SUCCESS\n", t.Name)
 				color.Unset() // Don't forget to unset
+				fmt.Fprintln(os.Stderr, "good")
 				successCount++
 			}
 			wg.Done()
@@ -120,7 +136,7 @@ func mainErr() error {
 		jobs <- target
 	}
 	wg.Wait()
-	return doMeAfter(0, 0, 0)
+	return doMeAfter(successCount, errorCount, len(targets), skippedCount, errors)
 }
 
 func (t *Target) apply() error {
@@ -131,11 +147,12 @@ func (t *Target) apply() error {
 		return nil
 	}
 
-	fmt.Printf("applying %s\n", t.Name)
+	// fmt.Printf("applying %s\n", t.Name)
 
 	if t.Name == "f" || t.Name == "c" {
 		// if t.Name == "f" {
 		return fmt.Errorf("ZOMG BAD")
 	}
+
 	return nil
 }
