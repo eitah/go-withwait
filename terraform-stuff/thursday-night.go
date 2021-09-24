@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/fatih/color"
 	"math/rand"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 var red *color.Color
@@ -76,7 +77,7 @@ func mainErr() error {
 	wg.Add(len(targets))
 
 	// c := make(chan Target, len(targets))
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 2; i++ {
 		go func() {
 			applyHasFailed := false
 			for {
@@ -84,7 +85,7 @@ func mainErr() error {
 				case t := <-jobs:
 					if applyHasFailed {
 						t.Skipped = true
-						// fmt.Printf("skipped later target: %s\n", t.Name)
+						fmt.Printf("skipped later target: %s\n", t.Name)
 					} else {
 						if err := t.apply(); err != nil {
 							t.Error = err
@@ -100,8 +101,8 @@ func mainErr() error {
 						}
 					}
 					results <- t
-				case <-done:
-					applyHasFailed = true
+					// case <-done:
+					// 	applyHasFailed = true
 				}
 			}
 		}()
